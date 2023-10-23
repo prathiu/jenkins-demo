@@ -1,0 +1,82 @@
+CI/CD using master - docker agent 
+
+Deployment using Argo CD to K8
+2 Folders - Source code & manifest k8 yaml files
+
+CI - Jenkins
+CD - Gitops - Argo CD
+
+EC2 - JDK, Jenkins, Docker, Minikube & Kubectl , Sonar
+Plugins - Docker pipeline plugin, k8 deploy plugin
+Credentails - github, docker hub, kubeconfig, git as seceret text
+
+pipeline {
+  agent {
+    docker {
+}
+}
+  stages {
+    stage ('Code analysy') {
+     environment {
+        SONAR_URL = "http://18.118.188.23:9000"
+      }
+      steps {
+        withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
+          sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn sonar:sonar -Dsonar.login=$SONAR_AUTH_TOKEN -Dsonar.host.url=${SONAR_URL}'
+        }
+      }
+    }
+     stage('Building the docker image') {  // Docker file has mvn build
+       environment {
+          DOCKERHUB_CREDENTIALS = credentials('dockeruser')
+           registry = "mubeen507/frontend-lms:${BUILD_NUMBER}"
+             registryCredential = 'dockerhub'
+            steps {
+                sh 'cd webapp && docker build -t mubeen507/frontend-lms:${BUILD_NUMBER} .'
+            }
+        }
+     }
+        stage('Logging into dockerhub account') {
+            steps {
+                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+            }
+        }
+        stage('pushing the docker image into dockerhub') {
+            steps {
+                  sh 'docker push mubeen507/frontend-lms:${BUILD_NUMBER}'
+            }
+        }
+        stage('Remove old docker images') {
+             steps {
+                 sh 'docker rmi -f mubeen507/frontend-lms:${BUILD_NUMBER}'
+            }
+}
+
+       stage('Update Deployment File') {
+        environment {
+            GIT_REPO_NAME = "Jenkins-Zero-To-Hero"
+            GIT_USER_NAME = "prathiu"
+        }
+}
+        steps {
+            withCredentials([string(credentialsId: 'git', variable: 'GITHUB_TOKEN')]) {
+                sh '''
+                    git config user.email "abhishek.xyz@gmail.com"
+                    git config user.name "prathiu"
+                    BUILD_NUMBER=${BUILD_NUMBER}
+                    sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+                    git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
+                    git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+                    git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                '''
+            }
+        }
+    }
+  }
+}
+
+
+// Download Argo CD & Argo CD operator and open Argo CD UI and create project and attach you git link of k8 manifest files and click on syncronize.
+Argo CD will fetch for github repo for manifest files updated and it automatically deploy on k8 cluster
+  
+      
