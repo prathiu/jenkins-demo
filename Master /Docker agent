@@ -1,4 +1,4 @@
-CI/CD using master - docker agent 
+CI/CD using master - docker agent --- Minikube 
 
 Deployment using Argo CD to K8
 2 Folders - Source code & manifest k8 yaml files
