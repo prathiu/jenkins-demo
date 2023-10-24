@@ -1,0 +1,68 @@
+Jenkins file - Master / Slave configuration by using kubectl  ----  EKS
+
+Credentails - Github, docker hub &  aws credententials
+Plugins - Docker plugin, Docker piprline & Kuberntes deploy plugin
+
+Master - Download JDK & Jenkins - EC2 
+Slave - Download Sonarqube, Docker, EKS cluster & Kubectl - EC2 and configure ec2 pvt address in jenkins Node 
+
+pipeline {
+    agent {
+      label 'docker'
+}
+   environment {
+    DOCKERHUB-CREDENTIALS = credentials('dockeruser')
+     registry = "prathiusha/imagename"
+       registryCredential = 'dockeruser'
+    environment {
+        AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')  // add this in jenkins credentails of a user
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY') // add this in jenkins credentials
+        AWS_DEFAULT_REGION = "us-east-1"
+}
+   stages {
+     stage('Sonar') {
+       environment {
+          SONAR_URL = "http://18.118.188.23:9000"
+}
+       steps {
+        withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
+          sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn sonar:sonar -Dsonar.login=$SONAR_AUTH_TOKEN -Dsonar.host.url=${SONAR_URL}'
+}
+}
+}
+    stage('Build') {
+      steps {
+          sh 'cd webapp && docker build -t prathiusha/imagename .'
+    }
+}
+    stage('Push') {
+      steps {
+         sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+         sh 'docker push prathiusha/imagename'
+}
+}
+   stage('Remove old docker images') {
+     steps {
+            sh 'docker rmi -f  prathiusha/imagename'
+            }
+        }
+
+    stage("Deploy to EKS") {
+            steps {
+                script {
+                    dir('kubernetes') {
+                        sh "aws eks update-kubeconfig --name myapp-eks-cluster"
+                        sh "kubectl apply -f nginx-deployment.yaml"
+                        sh "kubectl apply -f nginx-service.yaml"
+}
+}
+}
+
+}
+
+}
+}
+     
+    
+      
+       
